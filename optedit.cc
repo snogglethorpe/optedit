@@ -8,23 +8,42 @@ enum EditType { SKIP = 0, DELETE = 1, INSERT = 2, REPLACE = 3 };
 
 typedef std::array<unsigned, 4> EditCosts;
 
-EditCosts std_edit_costs { 1, 10, 10, 2 };
+EditCosts std_edit_costs { 1, 10, 15, 5 };
 const char *edit_type_names[4] = { "SKP", "DEL", "INS", "REP" };
 
 struct Edit
 {
-  Edit (EditType _type, char _ch) : type (_type), ch (_ch) { }
+  Edit (EditType _type, char _from_ch, char _to_ch) : type (_type), from_ch (_from_ch), to_ch (_to_ch) { }
   EditType type;
-  char ch;
+  char from_ch, to_ch;
 };
+
+std::string edit_rep (const Edit &edit)
+{
+  std::string rep (edit_type_names[edit.type]); 
+  if (edit.type != INSERT)
+    {
+      rep += ' ';
+      rep += edit.from_ch;
+    }
+  if (edit.type != DELETE && edit.type != SKIP)
+    {
+      rep += ' ';
+      rep += edit.to_ch;
+    }
+  return rep;
+}
 
 std::list<Edit>
 compute_optimal_edits (const std::string &from, const std::string &to, const EditCosts &costs)
 {
   struct EditNode
   {
-    EditNode () : edit (SKIP, 0), cost (0) { }
-    EditNode (EditType type, char ch, unsigned _cost) : edit (type, ch), cost (_cost) { }
+    EditNode () : edit (SKIP, 0, 0), cost (0) { }
+
+    EditNode (EditType type, char from_ch, char to_ch, unsigned _cost)
+      : edit (type, from_ch, to_ch), cost (_cost)
+    { }
 
     Edit edit;
     unsigned cost;
@@ -48,7 +67,10 @@ compute_optimal_edits (const std::string &from, const std::string &to, const Edi
   // everything in FROM to get a zero-length string.
   //
   for (unsigned from_idx = 0; from_idx < from_length; from_idx++)
-    edit_matrix[0][from_idx + 1] = EditNode (DELETE, 0, (from_idx + 1) * costs[DELETE]);
+    {
+      edit_matrix[0][from_idx + 1] = EditNode (DELETE, from[from_idx], 0, (from_idx + 1) * costs[DELETE]);
+//    std::cout << "EM[" << 0 << "][" << from_idx + 1 << "]: " << edit_rep (edit_matrix[0][from_idx + 1].edit) << " (cost = " << (edit_matrix[0][from_idx + 1].cost) << ")" << '\n';
+    }
 
   // Now scan through the matrix a row at a time, filling in each node
   // using the optimal choice from the three available predecessors,
@@ -60,7 +82,8 @@ compute_optimal_edits (const std::string &from, const std::string &to, const Edi
       // there's no other choice (because the from string has zero
       // length).
       //
-      edit_matrix[to_idx + 1][0] = EditNode (INSERT, to[to_idx], (to_idx + 1) * costs[INSERT]);
+      edit_matrix[to_idx + 1][0] = EditNode (INSERT, 0, to[to_idx], (to_idx + 1) * costs[INSERT]);
+//    std::cout << "EM[" << to_idx + 1 << "][" << 0 << "]: " << edit_rep (edit_matrix[to_idx + 1][0].edit) << " (cost = " << (edit_matrix[to_idx + 1][0].cost) << ")" << '\n';
 
       for (unsigned from_idx = 0; from_idx < from_length; from_idx++)
 	{
@@ -72,12 +95,12 @@ compute_optimal_edits (const std::string &from, const std::string &to, const Edi
 
 	  unsigned cost;
 	  EditType type;
-	  if (ins_cost > del_cost && ins_cost > rep_cost)
+	  if (ins_cost < del_cost && ins_cost < rep_cost)
 	    {
 	      cost = ins_cost;
 	      type = INSERT;
 	    }
-	  else if (del_cost > rep_cost)
+	  else if (del_cost < rep_cost)
 	    {
 	      cost = del_cost;
 	      type = DELETE;
@@ -88,7 +111,8 @@ compute_optimal_edits (const std::string &from, const std::string &to, const Edi
 	      type = rep_type;
 	    }
 
-	  edit_matrix[to_idx + 1][from_idx + 1] = EditNode (type, to[to_idx], cost);
+	  edit_matrix[to_idx + 1][from_idx + 1] = EditNode (type, from[from_idx], to[to_idx], cost);
+//     	  std::cout << "EM[" << to_idx + 1 << "][" << from_idx + 1 << "]: " << edit_rep (edit_matrix[to_idx + 1][from_idx + 1].edit) << " (cost = " << (edit_matrix[to_idx + 1][from_idx + 1].cost) << ")" << '\n';
 	}
     }
 
@@ -100,7 +124,7 @@ compute_optimal_edits (const std::string &from, const std::string &to, const Edi
   unsigned from_idx = from_length, to_idx = to_length;
   while (from_idx > 0 || to_idx > 0)
     {
-      const Edit &edit = edit_matrix[to_idx + 1][from_idx + 1].edit;
+      const Edit &edit = edit_matrix[to_idx][from_idx].edit;
       result.push_front (edit);
       if (edit.type != INSERT)
 	from_idx--;
@@ -124,6 +148,6 @@ int main (int argc, const char **argv)
 
   for (const Edit &edit : edits)
     {
-      std::cout << edit_type_names[edit.type] << " " << edit.ch << '\n';
+      std::cout << edit_rep (edit) << '\n';
     }
 }
